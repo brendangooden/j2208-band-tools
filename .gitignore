@@ -1,0 +1,23 @@
+# Pulled APK + decompiler output - vendor copyright, never publish
+apk/
+jadx-out/
+
+# Capture output - personal health data, never publish
+captures/
+notes/
+*.csv
+*.sqlite
+*.sqlite3
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
