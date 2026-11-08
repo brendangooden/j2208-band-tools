@@ -141,9 +141,11 @@ class Store:
 class BandSession:
     """One connected session. Owns the notify subscription."""
 
-    def __init__(self, client: BleakClient, store: Store):
+    def __init__(self, client: BleakClient, store: Store,
+                 stop: asyncio.Event | None = None):
         self.client = client
         self.store = store
+        self.stop = stop
         self.write_char = None
         self.inbox: asyncio.Queue[bytes] = asyncio.Queue()
         self.measuring = False
@@ -175,6 +177,8 @@ class BandSession:
         deadline = time.monotonic() + overall
         last = time.monotonic()
         while time.monotonic() < deadline:
+            if self.stop is not None and self.stop.is_set():
+                return out
             try:
                 data = await asyncio.wait_for(self.inbox.get(), timeout=0.3)
             except asyncio.TimeoutError:
@@ -243,6 +247,8 @@ class BandSession:
         deadline = time.monotonic() + window
         try:
             while time.monotonic() < deadline:
+                if self.stop is not None and self.stop.is_set():
+                    break
                 try:
                     data = await asyncio.wait_for(self.inbox.get(), timeout=0.5)
                 except asyncio.TimeoutError:
@@ -269,9 +275,12 @@ async def run(args) -> int:
         stop.set()
 
     try:
+        loop = asyncio.get_running_loop()
+        loop.add_signal_handler(signal.SIGINT, _sig)
+        loop.add_signal_handler(signal.SIGTERM, _sig)
+    except (NotImplementedError, RuntimeError, ValueError):
         signal.signal(signal.SIGINT, _sig)
-    except ValueError:
-        pass
+        signal.signal(signal.SIGTERM, _sig)
 
     cycle = 0
     backoff = 5
@@ -281,7 +290,7 @@ async def run(args) -> int:
     while not stop.is_set():
         try:
             async with BleakClient(args.address, timeout=args.timeout) as client:
-                s = BandSession(client, store)
+                s = BandSession(client, store, stop)
                 s.interval_hint = max(5.0, args.interval - 3.0)
                 await s.setup()
                 backoff = 5
